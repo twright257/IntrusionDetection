@@ -29,7 +29,7 @@ import org.jnetpcap.protocol.tcpip.Udp;
 
 /**
  * ScannerFinder is used to read through pcap and policy files that are taken as command
- * line arguments and print a warning message as well as the potential attackers ip if 
+ * line arguments and print a warning message as well as the potential attacker's ip if 
  * the policy is matched. 
  * 
  * Tyler Wright April 19, 2016
@@ -57,9 +57,9 @@ public class IDS {
 
 	/*
 	 * constructor
-	 * @params: filePath = path of pcap file, policy = path of policy file
+	 * @params: policy = path of policy file, filePath = path of pcap file
 	 */
-	public IDS(String filePath, String policy) {
+	public IDS(String policy, String filePath) {
 		PCAP_FILENAME = filePath;
 		POLICY = policy;
 		pcap = Pcap.openOffline(PCAP_FILENAME, errbuf);
