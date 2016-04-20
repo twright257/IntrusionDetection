@@ -126,6 +126,7 @@ public class IDS {
 				matcher = pattern.matcher(contents);
 				if (matcher.find()) {
 					System.out.println("WARNING!");
+					
 				}
 			} else {
 				if (ipHash.containsKey(sourceIP)) {
@@ -137,6 +138,7 @@ public class IDS {
 					matcher2 = pattern2.matcher(synVal); 
 					if (matcher.find() || matcher2.find()) {
 						System.out.println("WARNING!!! " + sourceIP);
+						System.out.println(synVal);
 						ipHash.remove(sourceIP); 
 					}
 				} else {
