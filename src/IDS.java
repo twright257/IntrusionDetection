@@ -28,11 +28,11 @@ import org.jnetpcap.protocol.tcpip.Tcp;
 import org.jnetpcap.protocol.tcpip.Udp;
 
 /**
- * ScannerFinder is used to read through a pcap file that is taken as a command
- * line argument and print the IP addresses that send more than three times as
- * many SYN requests as the SYNACK that they receive.
+ * ScannerFinder is used to read through pcap and policy files that are taken as command
+ * line arguments and print a warning message as well as the potential attackers ip if 
+ * the policy is matched. 
  * 
- * Tyler Wright March 22, 2015
+ * Tyler Wright April 19, 2016
  * 
  */
 public class IDS {
@@ -43,19 +43,22 @@ public class IDS {
 	private String attackerPort;
 	private String attacker;
 	private String fromHost;
-	private String toHost2; 
+	private String toHost2;
 	private String toHost;
 	private Pattern pattern;
-	private Pattern pattern2; 
+	private Pattern pattern2;
 	private Matcher matcher;
-	private Matcher matcher2; 
+	private Matcher matcher2;
 	private final String POLICY;
 	private final String PCAP_FILENAME;
 	private final StringBuilder errbuf = new StringBuilder();
 	private Pcap pcap;
 	private HashMap ipHash = new HashMap();
 
-	// constructor
+	/*
+	 * constructor
+	 * @params: filePath = path of pcap file, policy = path of policy file
+	 */
 	public IDS(String filePath, String policy) {
 		PCAP_FILENAME = filePath;
 		POLICY = policy;
@@ -63,8 +66,9 @@ public class IDS {
 		setPolicy();
 	}
 
-	// method for parsing pcap file and printing out up address of possible port
-	// scanners
+	/*
+	 * method for reading in packets from pcap file
+	 */
 	public void parsePCAP() {
 		// if pcap empty, print file error and return
 		if (pcap == null) {
@@ -82,11 +86,7 @@ public class IDS {
 
 			// get next packet
 			public void nextPacket(JPacket packet, StringBuilder errbuf) {
-				/*
-				 * byte[] sIP = new byte[4]; byte[] dIP = new byte[4]; String
-				 * sourceIP = ""; String destIP = "";
-				 */
-				// if packet has ip and tcp header, examine further
+				// if packet has correct headers, examine further
 				if ((proto.equals("none") || proto.equals("tcp")) && packet.hasHeader(ip) && packet.hasHeader(tcp)) {
 					checkTCP(packet, tcp, ip);
 				} else if (packet.hasHeader(ip) && packet.hasHeader(udp)) {
@@ -94,95 +94,88 @@ public class IDS {
 				}
 
 			}
-
 		}, errbuf);
-
 		pcap.close();
 	}
 
+	/*
+	 * methods for checking tcp packets as well as stateful
+	 */
 	private void checkTCP(JPacket packet, Tcp tcp, Ip4 ip) {
 		byte[] sIP = new byte[4];
 		byte[] dIP = new byte[4];
 		String sourceIP = "";
 		String destIP = "";
 		sIP = packet.getHeader(ip).source();
-		sourceIP = org.jnetpcap.packet.format.FormatUtils.ip(sIP); // source ip
-																	// address
-																	// as string
+		sourceIP = org.jnetpcap.packet.format.FormatUtils.ip(sIP);
 		dIP = packet.getHeader(ip).destination();
-		destIP = org.jnetpcap.packet.format.FormatUtils.ip(dIP); // destination
-																	// ip
-																	// address
-																	// as string
-
+		destIP = org.jnetpcap.packet.format.FormatUtils.ip(dIP);
+		// check if packet matches policy
 		if (destIP.equals(host) && (attackerPort.equals("any") || attackerPort.equals(String.valueOf(tcp.source())))
 				&& (hostPort.equals("any") || hostPort.equals(String.valueOf(tcp.destination())))) {
-			System.out.println(destIP);
+			// save packet contents as string
 			JBuffer p = tcp.peerPayloadTo(packet);
 			StringBuilder sb = new StringBuilder();
 			p.getUTF8String(0, sb, p.size());
 			String contents = sb.toString();
 			if (stateless) {
 				matcher = pattern.matcher(contents);
+				// packet contents match policy regex
 				if (matcher.find()) {
-					System.out.println("WARNING!");
-					
+					System.out.println("WARNING!!! " + sourceIP);
+
 				}
+			// stateful content check. save and concat packets by sender ip
 			} else {
 				if (ipHash.containsKey(sourceIP)) {
 					String synVal = (String) (ipHash.get(sourceIP));
 					synVal += contents.trim();
-					//System.out.println(synVal);
 					ipHash.put(sourceIP, synVal);
 					matcher = pattern.matcher(synVal);
-					matcher2 = pattern2.matcher(synVal); 
+					matcher2 = pattern2.matcher(synVal);
 					if (matcher.find() || matcher2.find()) {
 						System.out.println("WARNING!!! " + sourceIP);
-						System.out.println(synVal);
-						ipHash.remove(sourceIP); 
+						ipHash.remove(sourceIP);
 					}
 				} else {
 					ipHash.put(sourceIP, contents.trim());
 				}
-				//System.out.println(contents);
 			}
 		}
 	}
 
+	/*
+	 * method for checking udp packets
+	 */
 	private void checkUDP(JPacket packet, Udp udp, Ip4 ip) {
 		byte[] sIP = new byte[4];
 		byte[] dIP = new byte[4];
 		String sourceIP = "";
 		String destIP = "";
 		sIP = packet.getHeader(ip).source();
-		sourceIP = org.jnetpcap.packet.format.FormatUtils.ip(sIP); // source ip
-																	// address
-																	// as string
+		sourceIP = org.jnetpcap.packet.format.FormatUtils.ip(sIP);
 		dIP = packet.getHeader(ip).destination();
-		destIP = org.jnetpcap.packet.format.FormatUtils.ip(dIP); // destination
-																	// ip
-																	// address
-																	// as string
+		destIP = org.jnetpcap.packet.format.FormatUtils.ip(dIP);
 		String c = packet.toString();
+		// check if packet matches policy
 		if (destIP.equals(host) && (attackerPort.equals("any") || attackerPort.equals(String.valueOf(udp.source())))
 				&& (hostPort.equals("any") || hostPort.equals(String.valueOf(udp.destination())))) {
-			System.out.println(destIP);
+			// save packet contents as string
 			JBuffer p = udp.peerPayloadTo(packet);
 			StringBuilder sb = new StringBuilder();
 			p.getUTF8String(0, sb, p.size());
 			String contents = sb.toString();
-			if (stateless) {
-				matcher = pattern.matcher(contents);
-				if (matcher.find()) {
-					System.out.println("WARNING!");
-				}
-			} else {
-
+			matcher = pattern.matcher(contents);
+			// packet contents match policy regex
+			if (matcher.find()) {
+				System.out.println("WARNING!!! " + sourceIP);
 			}
-			System.out.println(contents);
 		}
 	}
 
+	/*
+	 * method for reading in and setting policy values
+	 */
 	private void setPolicy() {
 		File file = new File(POLICY);
 		try (BufferedReader br = new BufferedReader(new FileReader(file))) {
@@ -217,21 +210,19 @@ public class IDS {
 					break;
 				case "to_host":
 					toHost = lineVals[1].replace("\"", "");
-					toHost2 = toHost; 
+					toHost2 = toHost;
 					if (!stateless) {
 						toHost2 = ".*?" + toHost + ".*";
-						toHost2 = toHost.replaceAll("\\s",""); 
+						toHost2 = toHost.replaceAll("\\s", "");
 					}
 					pattern = Pattern.compile(toHost);
-					pattern2 = Pattern.compile(toHost2); 
+					pattern2 = Pattern.compile(toHost2);
 				}
 			}
-			System.out.println(host + stateless + proto + hostPort + attackerPort + attacker + toHost);
 		} catch (FileNotFoundException e) {
 			System.err.println("FILE NOT FOUND");
 			e.printStackTrace();
 		} catch (IOException e) {
-			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
 	}
